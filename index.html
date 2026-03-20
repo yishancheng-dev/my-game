@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>四人同步樓層工具</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #e5e7eb;
+      color: #111827;
+    }
+    .page {
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .panel {
+      background: white;
+      border: 1px solid #d1d5db;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+    .section { margin-bottom: 12px; }
+    .row-wrap {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .input {
+      width: 220px;
+      max-width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      font-size: 14px;
+      background: white;
+    }
+    .btn {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      background: white;
+      color: #111827;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-primary {
+      background: #111827;
+      color: white;
+      border-color: #111827;
+    }
+    .btn-danger {
+      background: #dc2626;
+      color: white;
+      border-color: #dc2626;
+    }
+    .player-badge {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid;
+      font-size: 14px;
+      color: white;
+    }
+    .badge-a { background: #3b82f6; border-color: #2563eb; }
+    .badge-b { background: #ef4444; border-color: #dc2626; }
+    .badge-c { background: #22c55e; border-color: #16a34a; }
+    .badge-d { background: #a855f7; border-color: #9333ea; }
+    .info-box {
+      border-radius: 12px;
+      border: 1px solid #d1d5db;
+      background: #f8fafc;
+      padding: 12px;
+      line-height: 1.7;
+      font-size: 14px;
+    }
+    .info-text { margin-top: 8px; color: #4b5563; }
+    .error-text { margin-top: 8px; color: #dc2626; }
+    .grid-panel {
+      background: #d1d5db;
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .floor-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .floor-label {
+      width: 36px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .cell {
+      width: 80px;
+      height: 56px;
+      border-radius: 10px;
+      border: 2px solid #9ca3af;
+      background: white;
+      cursor: pointer;
+    }
+    .cell.selected {
+      outline: 4px solid #111827;
+      outline-offset: 1px;
+    }
+    .cell.owned-a { background: #3b82f6; border-color: #2563eb; }
+    .cell.owned-b { background: #ef4444; border-color: #dc2626; }
+    .cell.owned-c { background: #22c55e; border-color: #16a34a; }
+    .cell.owned-d { background: #a855f7; border-color: #9333ea; }
+    .empty-state {
+      text-align: center;
+      color: #6b7280;
+      padding: 40px;
+      background: white;
+      border-radius: 16px;
+      border: 1px solid #d1d5db;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="container">
+      <div class="panel">
+        <div class="section">
+          <div class="row-wrap">
+            <input id="roomInput" class="input" placeholder="輸入房號" />
+            <button id="applyRoomBtn" class="btn btn-primary">進入房間</button>
+            <button id="randomRoomBtn" class="btn">隨機房號</button>
+            <button id="clearMineBtn" class="btn">清除我的標記</button>
+            <button id="clearAllBtn" class="btn btn-danger">清除全部標記</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="row-wrap" id="playerButtons"></div>
+        </div>
+
+        <div class="section">
+          <div class="row-wrap">
+            <div class="player-badge badge-a">玩家 A</div>
+            <div class="player-badge badge-b">玩家 B</div>
+            <div class="player-badge badge-c">玩家 C</div>
+            <div class="player-badge badge-d">玩家 D</div>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <div><strong>目前房間：</strong><span id="roomText">尚未輸入</span></div>
+          <div><strong>目前視角：</strong><span id="viewerText">尚未選擇</span></div>
+          <div><strong>同步狀態：</strong><span id="statusText">尚未連線</span></div>
+          <div class="info-text">規則：每一層每位玩家都能選一個位置，但不能和其他玩家在同一層選到同一格。所有人都會看到彼此的顏色標記。</div>
+          <div class="error-text" id="errorText" style="display:none;">先把 firebaseConfig 換成你的 Firebase Realtime Database 設定，四個人用同一個房號進入，就會即時同步。</div>
+        </div>
+      </div>
+
+      <div id="gridRoot" class="empty-state">請先輸入房號並選擇玩家</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getDatabase, ref, onValue, set, remove, off } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+    const FLOORS = 10;
+    const PLAYERS = ["A", "B", "C", "D"];
+    const POSITIONS = ["a", "b", "c", "d"];
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAikgXhYaU9ZPIyWKMwTs3Gp2mMU_ISZ0I",
+      authDomain: "test-6f340.firebaseapp.com",
+      databaseURL: "https://test-6f340-default-rtdb.firebaseio.com",
+      projectId: "test-6f340",
+      storageBucket: "test-6f340.firebasestorage.app",
+      messagingSenderId: "947078831949",
+      appId: "1:947078831949:web:50c7341a4505aba6c1e104",
+    };
+
+    function getFirebaseApp() {
+      if (getApps().length) return getApps()[0];
+      return initializeApp(firebaseConfig);
+    }
+
+    function hashString(str) {
+      let h = 2166136261;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return h >>> 0;
+    }
+
+    function mulberry32(a) {
+      return function () {
+        let t = (a += 0x6d2b79f5);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function shuffle(arr, rand) {
+      const next = [...arr];
+      for (let i = next.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [next[i], next[j]] = [next[j], next[i]];
+      }
+      return next;
+    }
+
+    function generateBoard(seedText) {
+      const rand = mulberry32(hashString(seedText));
+      const board = [];
+      for (let i = 0; i < FLOORS; i++) {
+        const shuffled = shuffle(PLAYERS, rand);
+        const floor = {};
+        POSITIONS.forEach((pos, idx) => {
+          floor[pos] = shuffled[idx];
+        });
+        board.push(floor);
+      }
+      return board;
+    }
+
+    function roomPath(roomId) {
+      return `rooms/${roomId}`;
+    }
+
+    function getFloorSelections(selected, floorNum) {
+      return selected?.[floorNum] || {};
+    }
+
+    function getPositionOwner(floorSelections, pos) {
+      return PLAYERS.find((player) => floorSelections[player] === pos) || null;
+    }
+
+    const state = {
+      roomId: "",
+      roomInput: "",
+      viewer: "",
+      selected: {},
+      status: "尚未連線",
+      connected: false,
+      firebaseReady: true,
+      unsubscribeRef: null,
+    };
+
+    const roomInputEl = document.getElementById("roomInput");
+    const roomTextEl = document.getElementById("roomText");
+    const viewerTextEl = document.getElementById("viewerText");
+    const statusTextEl = document.getElementById("statusText");
+    const errorTextEl = document.getElementById("errorText");
+    const gridRootEl = document.getElementById("gridRoot");
+    const playerButtonsEl = document.getElementById("playerButtons");
+
+    function setStatus(text) {
+      state.status = text;
+      statusTextEl.textContent = text;
+    }
+
+    function renderPlayerButtons() {
+      playerButtonsEl.innerHTML = "";
+      PLAYERS.forEach((p) => {
+        const btn = document.createElement("button");
+        btn.className = `btn ${state.viewer === p ? "btn-primary" : ""}`;
+        if (!state.roomId) btn.disabled = true;
+        btn.textContent = `玩家 ${p}`;
+        btn.onclick = () => {
+          state.viewer = p;
+          renderAll();
+        };
+        playerButtonsEl.appendChild(btn);
+      });
+    }
+
+    function renderGrid() {
+      if (!state.roomId || !state.viewer) {
+        gridRootEl.className = "empty-state";
+        gridRootEl.innerHTML = "請先輸入房號並選擇玩家";
+        return;
+      }
+
+      const board = generateBoard(state.roomId);
+      const gridPanel = document.createElement("div");
+      gridPanel.className = "grid-panel";
+
+      [...board].reverse().forEach((floor, reverseIndex) => {
+        const floorNum = FLOORS - reverseIndex;
+        const floorSelections = getFloorSelections(state.selected, floorNum);
+
+        const row = document.createElement("div");
+        row.className = "floor-row";
+
+        const label = document.createElement("div");
+        label.className = "floor-label";
+        label.textContent = `L${floorNum}`;
+        row.appendChild(label);
+
+        POSITIONS.forEach((pos) => {
+          const owner = getPositionOwner(floorSelections, pos);
+          const viewerSelected = floorSelections[state.viewer] === pos;
+
+          const btn = document.createElement("button");
+          btn.className = "cell";
+          if (owner) btn.classList.add(`owned-${owner.toLowerCase()}`);
+          if (viewerSelected) btn.classList.add("selected");
+          btn.title = owner ? `玩家 ${owner} 已選 ${pos}` : `選擇 ${pos}`;
+          btn.onclick = () => toggle(floorNum, pos);
+          row.appendChild(btn);
+        });
+
+        gridPanel.appendChild(row);
+      });
+
+      gridRootEl.className = "";
+      gridRootEl.innerHTML = "";
+      gridRootEl.appendChild(gridPanel);
+    }
+
+    function renderInfo() {
+      roomTextEl.textContent = state.roomId || "尚未輸入";
+      viewerTextEl.textContent = state.viewer ? `玩家 ${state.viewer}` : "尚未選擇";
+      statusTextEl.textContent = state.status;
+      errorTextEl.style.display = state.firebaseReady ? "none" : "block";
+    }
+
+    function renderAll() {
+      roomInputEl.value = state.roomInput;
+      renderPlayerButtons();
+      renderInfo();
+      renderGrid();
+    }
+
+    async function toggle(floorNum, pos) {
+      try {
+        const floorSelections = getFloorSelections(state.selected, floorNum);
+        const owner = getPositionOwner(floorSelections, pos);
+
+        if (owner && owner !== state.viewer) {
+          setStatus(`L${floorNum} 的 ${pos} 已被玩家 ${owner} 選走`);
+          renderInfo();
+          return;
+        }
+
+        const nextFloorSelections = {
+          ...floorSelections,
+          [state.viewer]: floorSelections[state.viewer] === pos ? null : pos,
+        };
+
+        const next = {
+          ...state.selected,
+          [floorNum]: nextFloorSelections,
+        };
+
+        const app = getFirebaseApp();
+        const db = getDatabase(app);
+        await set(ref(db, `${roomPath(state.roomId)}/selected`), next);
+      } catch (e) {
+        console.error(e);
+        state.firebaseReady = false;
+        setStatus("寫入失敗，請檢查 Firebase 設定");
+        renderInfo();
+      }
+    }
+
+    async function clearAll() {
+      try {
+        const app = getFirebaseApp();
+        const db = getDatabase(app);
+        await remove(ref(db, `${roomPath(state.roomId)}/selected`));
+      } catch (e) {
+        console.error(e);
+        setStatus("清除失敗，請檢查 Firebase 設定");
+        renderInfo();
+      }
+    }
+
+    async function clearMine() {
+      try {
+        const next = { ...state.selected };
+        for (let floorNum = 1; floorNum <= FLOORS; floorNum++) {
+          const floorSelections = { ...(next[floorNum] || {}) };
+          delete floorSelections[state.viewer];
+          next[floorNum] = floorSelections;
+        }
+        const app = getFirebaseApp();
+        const db = getDatabase(app);
+        await set(ref(db, `${roomPath(state.roomId)}/selected`), next);
+      } catch (e) {
+        console.error(e);
+        setStatus("清除個人標記失敗，請檢查 Firebase 設定");
+        renderInfo();
+      }
+    }
+
+    function subscribeRoom(roomId) {
+      if (state.unsubscribeRef) {
+        state.unsubscribeRef();
+        state.unsubscribeRef = null;
+      }
+      if (!roomId) {
+        state.selected = {};
+        setStatus("尚未連線");
+        renderAll();
+        return;
+      }
+
+      try {
+        const app = getFirebaseApp();
+        const db = getDatabase(app);
+        const roomRef = ref(db, `${roomPath(roomId)}/selected`);
+        state.firebaseReady = true;
+        setStatus(`連線中：${roomId}`);
+        renderInfo();
+
+        onValue(
+          roomRef,
+          (snapshot) => {
+            state.selected = snapshot.val() || {};
+            state.connected = true;
+            setStatus(`已同步房間：${roomId}`);
+            renderAll();
+          },
+          (e) => {
+            console.error(e);
+            state.connected = false;
+            setStatus("同步失敗，請檢查 Firebase 設定");
+            renderInfo();
+          }
+        );
+
+        state.unsubscribeRef = () => off(roomRef);
+      } catch (e) {
+        console.error(e);
+        state.firebaseReady = false;
+        state.connected = false;
+        state.selected = {};
+        setStatus("Firebase 尚未設定，請先填入設定值");
+        renderAll();
+      }
+    }
+
+    function applyRoom() {
+      const next = (state.roomInput || "").trim().toUpperCase();
+      if (!next) return;
+      state.roomId = next;
+      state.roomInput = next;
+      subscribeRoom(next);
+      renderAll();
+    }
+
+    function randomRoom() {
+      const next = `ROOM-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      state.roomId = next;
+      state.roomInput = next;
+      subscribeRoom(next);
+      renderAll();
+    }
+
+    roomInputEl.addEventListener("input", (e) => {
+      state.roomInput = e.target.value;
+    });
+    document.getElementById("applyRoomBtn").addEventListener("click", applyRoom);
+    document.getElementById("randomRoomBtn").addEventListener("click", randomRoom);
+    document.getElementById("clearMineBtn").addEventListener("click", clearMine);
+    document.getElementById("clearAllBtn").addEventListener("click", clearAll);
+
+    renderAll();
+  </script>
+</body>
+</html>
